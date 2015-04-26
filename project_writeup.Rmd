@@ -1,0 +1,148 @@
+---
+title: "Weight Lifting Exercise Recognition"
+output: html_document
+---
+
+# Objective
+This analysis leverages sensor data from six participants lifting weights in order to create a predictive model for recognizing proper weight lifting technique.  The data is from http://groupware.les.inf.puc-rio.br/har.
+
+# Summary
+Size participants were monitored with various motion sensors as they performed barbell weight lifting.  For the data training set, the collected data was attributed to one of the following classes:
+
+- Class A : exactly according to the specification
+- Class B : throwing the elbows to the front
+- Class C : lifting the dumbbell only halfway
+- Class D : lowering the dumbbell only halfway
+- Class E : throwing the hips to the front
+
+Using this training data, a random forest model was leveraged to predict the exercise class of out of sample measurements.  A random forest model was used because the model runs efficiently for classification problems with large number of input variables (53 selected).  The model accuracy of both the training and testing set was over 99.5% (error 0.4%).
+
+Note that the R randomForest function internally performs cross validation by contructing each tree using a different bootstrap sample for the training set.  As a result, this analysis does not include manual cross validation.
+
+Due to the high accurancy of the model, the 20 test cases were successfully identified.
+
+# Description
+The training data (https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv) consisted of 19622 records with 160 parameters.  Data scrubbing was performed to remove reference parameters and NA/mostly blank parameters.  After the cleansing, the resulting training data with 53 parameters (including the classe paramter) was partitioned into the training and testing data sets.
+
+
+```{r, echo=FALSE, warning=FALSE, results='hide', message=FALSE}
+#
+# Load Libraries
+#
+library(caret)
+library(randomForest)
+
+#
+# Load Data
+#
+setwd("c:/home/local/madlab/coursera/pracitical machine learning/project")
+trainRaw <- read.csv("pml-training.csv")
+testingRaw <- read.csv("pml-testing.csv")
+
+# Analysis
+nrow(trainRaw)      # 19622
+nrow(testingRaw)    # 20
+
+# feature set to use for analysis
+selection1=c(
+"roll_belt","pitch_belt","yaw_belt","total_accel_belt",
+"gyros_belt_x","gyros_belt_y","gyros_belt_z","accel_belt_x",
+"accel_belt_y","accel_belt_z","magnet_belt_x","magnet_belt_y",
+"magnet_belt_z","roll_arm","pitch_arm","yaw_arm",
+"total_accel_arm","gyros_arm_x","gyros_arm_y","gyros_arm_z",
+"accel_arm_x","accel_arm_y","accel_arm_z","magnet_arm_x",
+"magnet_arm_y","magnet_arm_z","roll_dumbbell","pitch_dumbbell",
+"yaw_dumbbell","total_accel_dumbbell","gyros_dumbbell_x","gyros_dumbbell_y",
+"gyros_dumbbell_z","accel_dumbbell_x","accel_dumbbell_y","accel_dumbbell_z",
+"magnet_dumbbell_x","magnet_dumbbell_y","magnet_dumbbell_z","roll_forearm",
+"pitch_forearm","yaw_forearm","total_accel_forearm","gyros_forearm_x",
+"gyros_forearm_y","gyros_forearm_z","accel_forearm_x","accel_forearm_y",
+"accel_forearm_z","magnet_forearm_x","magnet_forearm_y","magnet_forearm_z",
+"classe")
+
+
+trainFull <- subset(trainRaw, select=selection1)
+
+set.seed(1000)
+```
+```{r}
+inTraining <- createDataPartition(y=trainFull$classe, p=0.75, list=FALSE)
+training <- trainFull[inTraining,]
+testing <- trainFull[-inTraining,]
+
+# Count of data set
+nrow(training)
+nrow(testing)
+```
+
+
+Using the randomForest R library, the model was generated and prediction was evaluated for both the testing and training data set.
+
+```{r, cache=TRUE}
+rfModel <- randomForest(classe ~ ., data = training,
+                        proximity=TRUE, importance=TRUE, localImp=TRUE)
+
+prediction <- predict(rfModel, testing)
+testing$predictResult <- (prediction == testing$classe)
+
+```
+
+The following was the confusion matrix of the training set:
+```{r, echo=FALSE}
+print(rfModel$confusion)
+accuracy <- (rfModel$confusion[1,1]+rfModel$confusion[2,2]+rfModel$confusion[3,3]+
+               rfModel$confusion[4,4]+rfModel$confusion[5,5])/
+  sum(rfModel$confusion[,1:5])
+output1 <- rbind(c("Training Size", nrow(training)),
+                c("Accuracy Rate", round(accuracy,4)),
+                c("Error Rate", round((1-accuracy),4)))
+colnames(output1) <- c("Metric", "Value")
+print (output1)
+
+```
+
+The following was the confusion matrix of the testing set:
+```{r, echo=FALSE}
+print(table(prediction, testing$classe))
+accuracy <- sum(testing$predictResult)/nrow(testing)
+output2 <- rbind(c("Testing Size", nrow(testing)),
+                c("Accuracy Rate", round(accuracy,4)),
+                c("Error Rate", round((1-accuracy),4)))
+colnames(output2) <- c("Metric", "Value")
+print(output2)
+
+```
+
+
+
+#Appendix - Plots
+The following is the plot of the variable importance:
+
+```{r, echo=FALSE}
+varImpPlot(rfModel)
+```
+
+The following is the plot of the model error:
+
+```{r, echo=FALSE}
+plot(rfModel, main="Model Error")
+legend("topright", legend=unique(training$classe),
+       col=unique(as.numeric(training$classe)), pch=19) 
+
+```
+
+The following is the plot of the model outliners:
+
+```{r, echo=FALSE}
+plot(outlier(rfModel), type="h", main="Model Outliner")
+```
+
+#Appendix - 20 Test Cases
+The final 20 test cases were evaluated using the following code:
+
+```{r}
+# final predictions
+rfModel <- randomForest(classe ~ ., data = training)
+prediction <- predict(rfModel, testingRaw)
+```
+
